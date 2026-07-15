@@ -218,7 +218,9 @@ export function initCafeScene(canvasEl, options) {
   var BOSS_ORIGIN = new THREE.Vector3(24, -40, 0);
   var intAngle = 0;                          // interior gentle auto-orbit
   var bossYaw = 0, bossPitch = 0.45, bossZoom = 1; // boss room USER camera
-  var patioTables = []; // idle-management: patio table groups revealed as you buy "Meja"
+  var patioSeats = [];  // idle-management: {group, cust, torsoMat, coinT, swapT, swapDir, sc} per patio table
+  var patioCoins = [];  // rising "+coin" sprites emitted by paying patio customers
+  var PATIO_SHIRTS = [0xc45b4a, 0x4a7ba6, 0x5a8a6a, 0xe0a94e, 0x7a5aa0, 0x3f9a8a];
   var liveCusts = []; // interior "walk in & sit down" customers
   var intSteams = []; // coffee-cup steam wisps inside the cafe (animated while in interior)
   var intBarista = null, intBaristaY = 0, intTime = 0; // barista chibi, gently animated "making coffee"
@@ -335,6 +337,7 @@ export function initCafeScene(canvasEl, options) {
   // shared emissive materials mutated by the day-night cycle (assigned in buildCity)
   var cityWinMatA, cityWinMatB, lampBulbMat, carHeadMat, carTailMat;
   var patioLightMat; // string-light bulbs behind the cafe (glow at night)
+  var patioLights = []; // one actual light per umbrella table, so the patio isn't dark at night
 
   var cityTextures = [];
   function trackTex(tex) { cityTextures.push(tex); return tex; }
@@ -1379,8 +1382,9 @@ export function initCafeScene(canvasEl, options) {
     // idle-management stage: each patio table is a GROUP (parasol + table + 2
     // chairs + one seated customer) kept hidden until the player buys enough
     // "Meja". setPatioTables(n) reveals the first n -> the patio visibly fills up.
+    // Each seat is stored so the loop can emit "+coin" sprites and swap customers.
     var PATIO_SPOTS = [[-3.4, -3.3], [0, -3.3], [3.4, -3.3], [-3.4, -4.9], [0, -4.9], [3.4, -4.9]];
-    var PATIO_SHIRTS = [0xc45b4a, 0x4a7ba6, 0x5a8a6a, 0xe0a94e, 0x7a5aa0, 0x3f9a8a];
+    var PATIO_SC = 0.62;
     for (var pt = 0; pt < PATIO_SPOTS.length; pt++) {
       var g = new THREE.Group();
       var px = PATIO_SPOTS[pt][0], pz = PATIO_SPOTS[pt][1];
@@ -1388,6 +1392,12 @@ export function initCafeScene(canvasEl, options) {
       var leg = new THREE.Mesh(tableLegGeo, woodMat); leg.position.set(px, 0.25, pz); g.add(leg);
       var pole = new THREE.Mesh(poleGeo, woodMat); pole.position.set(px, 1.05, pz); g.add(pole);
       var para = new THREE.Mesh(parasolGeo, parasolMats[pt % parasolMats.length]); para.position.set(px, 1.62, pz); g.add(para);
+      // a light under each umbrella, child of the table group so it only turns
+      // on once that table is revealed (g.visible is toggled by setPatioTables)
+      var pLight = new THREE.PointLight(0xffd9a0, 2.2, 5, 2);
+      pLight.position.set(px, 1.4, pz);
+      g.add(pLight);
+      patioLights.push(pLight);
       for (var c = 0; c < 2; c++) {
         var sgn = c === 0 ? 1 : -1;
         var cx = px, cz = pz + sgn * 0.5;
@@ -1395,12 +1405,27 @@ export function initCafeScene(canvasEl, options) {
         var back = new THREE.Mesh(chairBackGeo, woodMat); back.position.set(cx, 0.44, cz + sgn * 0.11); g.add(back);
         var cleg = new THREE.Mesh(chairLegGeo, woodMat); cleg.position.set(cx, 0.15, cz); g.add(cleg);
       }
-      // a seated customer on the near-side chair (facing the table, i.e. toward the cafe)
-      var cust = addChibi(g, px, 0.02, pz + 0.5, 0, PATIO_SHIRTS[pt % PATIO_SHIRTS.length], 0x2c2218, true);
-      cust.scale.set(0.62, 0.62, 0.62);
+      // a seated customer on the near-side chair (facing the table, toward the cafe);
+      // seat is on the +z side of the table (cz = pz+0.5) so facing the table means
+      // facing -z (yaw=PI) — yaw=0 had them facing their own chair back instead
+      // group y = the chair seat height (0.3), not the ground -- otherwise the
+      // (scaled-down) customer sits buried at the base of the chair instead of on it
+      var cust = addChibi(g, px, 0.3, pz + 0.5, Math.PI, PATIO_SHIRTS[pt % PATIO_SHIRTS.length], 0x2c2218, true);
+      cust.scale.setScalar(PATIO_SC);
       g.visible = false;
       cityGroup.add(g);
-      patioTables.push(g);
+      patioSeats.push({
+        group: g, cust: cust, torsoMat: cust.children[0].material, sc: PATIO_SC,
+        coinT: 1.5 + pt * 0.6, swapT: 14 + pt * 4, swapDir: 0
+      });
+    }
+    // pool of rising "+coin" sprites (each its own material so it can fade solo)
+    var coinGeo = trackGeo(new THREE.CircleGeometry(0.13, 14));
+    for (var cn = 0; cn < 10; cn++) {
+      var cmat = new THREE.MeshBasicMaterial({ color: COLOR_GOLD, transparent: true, opacity: 0, depthWrite: false, toneMapped: false, side: THREE.DoubleSide });
+      trackMat(cmat);
+      var coin = new THREE.Mesh(coinGeo, cmat); coin.visible = false; cityGroup.add(coin);
+      patioCoins.push({ mesh: coin, mat: cmat, life: 0 });
     }
 
     // planter + bush row along the back (north of the avenue keep-out)
@@ -1425,7 +1450,6 @@ export function initCafeScene(canvasEl, options) {
       bulb.position.set(bx, 2.0 - 0.22 + droop, -3.5);
       cityGroup.add(bulb);
     }
-
     // coffee steam: soft billboard puffs rising from the cafe entrance, looping.
     // reuse the cloud texture; each puff owns a material so it can fade solo.
     var steamGeo = trackGeo(new THREE.PlaneGeometry(0.5, 0.6));
@@ -1728,6 +1752,46 @@ export function initCafeScene(canvasEl, options) {
           bd.hop = { t: 0, x0: bd.g.position.x, z0: bd.g.position.z, x1: nx, z1: nz };
         }
       }
+    }
+  }
+
+  // ---------- idle-management: paying customers (coins) + turnover on the patio ----------
+  var patioTmp = new THREE.Vector3();
+  function emitPatioCoin(cust, sc) {
+    var coin = null;
+    for (var i = 0; i < patioCoins.length; i++) { if (patioCoins[i].life <= 0) { coin = patioCoins[i]; break; } }
+    if (!coin) return;
+    cust.getWorldPosition(patioTmp);
+    coin.mesh.position.set(patioTmp.x, patioTmp.y + 0.5 * sc + 0.18, patioTmp.z);
+    coin.mesh.visible = true; coin.mat.opacity = 0.95; coin.life = 1.0;
+  }
+  function updatePatio(dt) {
+    for (var i = 0; i < patioSeats.length; i++) {
+      var s = patioSeats[i];
+      if (!s.group.visible) continue;
+      if (s.swapDir === 0) {
+        s.coinT -= dt;
+        if (s.coinT <= 0) { emitPatioCoin(s.cust, s.sc); s.coinT = 1.6 + Math.random() * 2.6; } // a customer "pays"
+        s.swapT -= dt;
+        if (s.swapT <= 0) s.swapDir = -1; // this customer is leaving
+      } else if (s.swapDir === -1) {      // shrink out (leaves)
+        var a = Math.max(0, s.cust.scale.x - dt * 1.6);
+        s.cust.scale.setScalar(a);
+        if (a <= 0.01) { s.torsoMat.color.setHex(PATIO_SHIRTS[Math.floor(Math.random() * PATIO_SHIRTS.length)]); s.swapDir = 1; }
+      } else {                            // grow in (a new customer arrives)
+        var b = Math.min(s.sc, s.cust.scale.x + dt * 1.6);
+        s.cust.scale.setScalar(b);
+        if (b >= s.sc) { s.swapDir = 0; s.swapT = 12 + Math.random() * 20; s.coinT = 0.8 + Math.random() * 1.5; }
+      }
+    }
+    for (var k = 0; k < patioCoins.length; k++) {
+      var pc = patioCoins[k];
+      if (pc.life <= 0) continue;
+      pc.life -= dt;
+      pc.mesh.position.y += dt * 0.7;
+      pc.mat.opacity = Math.max(0, pc.life) * 0.95;
+      pc.mesh.quaternion.copy(camera.quaternion);
+      if (pc.life <= 0) pc.mesh.visible = false;
     }
   }
 
@@ -2196,7 +2260,9 @@ export function initCafeScene(canvasEl, options) {
 
   // ---------- day-night application (mutates shared lights/materials, zero allocations) ----------
   function applyDayNight(phase) {
-    var k = dayFactor01(phase);
+    // interior/boss are enclosed rooms with their own fixed lamps -- they shouldn't
+    // go dark just because it's night outside, so pin them to full-day ambient
+    var k = (mode === "interior" || mode === "boss") ? 1 : dayFactor01(phase);
     var nk = 1 - k;
     hemi.color.lerpColors(HEMI_NIGHT_C, HEMI_DAY_C, k);
     hemi.intensity = 0.45 + 0.60 * k;
@@ -2211,6 +2277,7 @@ export function initCafeScene(canvasEl, options) {
     cityWinMatB.emissiveIntensity = glow;
     lampBulbMat.emissiveIntensity = glow;
     if (patioLightMat) patioLightMat.emissiveIntensity = 0.1 + 1.2 * nk; // fairy lights
+    for (var pli = 0; pli < patioLights.length; pli++) patioLights[pli].intensity = 2.2 * (0.3 + 0.7 * nk); // one lamp per umbrella table
 
     carHeadMat.emissiveIntensity = 0.9 * nk;
     carTailMat.emissiveIntensity = 0.9 * nk;
@@ -2660,7 +2727,7 @@ export function initCafeScene(canvasEl, options) {
     updateCars(dt);
     updatePeds(dt);
     updateCats(now, dt);
-    if (mode !== "interior" && mode !== "boss") updateBirds(dt);
+    if (mode !== "interior" && mode !== "boss") { updateBirds(dt); updatePatio(dt); }
     updateOrderAnchorFrame(dt);
 
     renderer.render(scene, camera);
@@ -2712,10 +2779,10 @@ export function initCafeScene(canvasEl, options) {
     },
     // idle-management: reveal the first n patio tables (parasol + seated customer)
     setPatioTables: function (n) {
-      n = Math.max(0, Math.min(patioTables.length, n || 0));
-      for (var i = 0; i < patioTables.length; i++) patioTables[i].visible = i < n;
+      n = Math.max(0, Math.min(patioSeats.length, n || 0));
+      for (var i = 0; i < patioSeats.length; i++) patioSeats[i].group.visible = i < n;
     },
-    patioCapacity: function () { return patioTables.length; },
+    patioCapacity: function () { return patioSeats.length; },
     setQuality: setQuality,
     setSensitivity: function (s) { lookSensitivity = Math.max(0.3, Math.min(2.5, s || 1)); },
     // for the minimap: where the "you" marker is and which way it faces

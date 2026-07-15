@@ -141,3 +141,14 @@ tracks — is documented in **[docs/PUBLISHING.md](docs/PUBLISHING.md)**.
 Made by **Dnayaka**. Art is low-poly geometry generated in code; music & sound
 are procedural (Web Audio) — no third-party assets, so the whole thing is
 copyright-clean.
+
+---
+
+## License
+
+Copyright (C) 2026 dnayaka
+
+Licensed under the **GNU General Public License v3.0** — see
+[LICENSE](LICENSE) for the full text. All dependencies (Capacitor, three.js)
+are themselves permissively licensed (MIT), so this repo is 100% free/open
+source software with no proprietary or non-free components.

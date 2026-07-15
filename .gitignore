@@ -37,3 +37,6 @@
 Thumbs.db
 *.log
 *.swp
+
+# graphify analysis output (generated, not source)
+/graphify-out/

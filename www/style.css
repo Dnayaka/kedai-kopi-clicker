@@ -150,18 +150,8 @@ html, body {
    flow space in #tap-area, so anything placed after it in the document never
    actually gets room to render ("+1/tap" was rendering with zero layout
    height, effectively dangling) */
-#tap-value {
-  position: absolute;
-  top: 10px;
-  left: 50%;
-  transform: translateX(-50%);
-  color: #d7ccc8;
-  font-size: 13px;
-  font-weight: 600;
-  text-shadow: 0 1px 3px rgba(0,0,0,0.6);
-  pointer-events: none;
-  z-index: 2;
-}
+/* idle-management: no more tap-to-earn, so the "+X / tap" hint is hidden */
+#tap-value { display: none; }
 
 /* generic hide helper (mode HUD, action button, carried chip, ...) */
 .hidden { display: none !important; }

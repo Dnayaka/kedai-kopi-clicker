@@ -92,12 +92,13 @@ A short (15–30s) **promo video** (YouTube link) is optional but boosts install
 
 Play Console gates release behind a checklist (**Policy → App content**):
 
-- **Privacy policy** — required for most apps. Since this game collects nothing,
-  a one-paragraph policy hosted anywhere (GitHub Pages, a Google Doc set to
-  public) is enough: *"This app does not collect, store, or share any personal
-  data. All progress is saved locally on your device."*
+- **Privacy policy** — required for most apps. Full text ready to host is in
+  [PRIVACY_POLICY.md](PRIVACY_POLICY.md) — just fill in a contact email and
+  publish it somewhere public (GitHub Pages, a public Google Doc), then paste
+  that URL into Play Console.
 - **Data safety** — declare **no data collected / no data shared** (all state is
-  local `localStorage`). It's honest and makes the listing look trustworthy.
+  local `localStorage`). See [DATA_SAFETY.md](DATA_SAFETY.md) for exactly which
+  answer to pick on every question in the questionnaire, and why.
 - **Content rating** — fill the questionnaire (this game → rated *Everyone*).
 - **Target audience**, **Ads** (declare **no ads**), **Government app** (no).
 - **App category** → Games → Simulation (or Casual).

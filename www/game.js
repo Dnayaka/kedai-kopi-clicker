@@ -624,6 +624,7 @@ import { createIcon } from "./icons.js";
   var $fovVal = document.getElementById("fov-val");
   var $qualityOptions = document.getElementById("quality-options");
   var $settingsClose = document.getElementById("settings-close");
+  var $resetGameBtn = document.getElementById("reset-game-btn");
   var $shopnameInput = document.getElementById("shopname-input");
   var $difficultyOptions = document.getElementById("difficulty-options");
   var $shopnameText = document.getElementById("shopname-text");
@@ -778,7 +779,7 @@ import { createIcon } from "./icons.js";
       $buyFullAuto.textContent = affordable ? "Beli (" + formatNumber(FULL_AUTO_COST) + ")" : formatNumber(FULL_AUTO_COST);
       $buyFullAuto.disabled = !affordable;
       if ($fullAutoCount) {
-        $fullAutoCount.textContent = "Sekali beli · nge-tap otomatis 2× nilai tap per detik";
+        $fullAutoCount.textContent = "Sekali beli · penuhi pesanan otomatis 2× nilai tap per detik";
       }
     }
   }
@@ -825,7 +826,6 @@ import { createIcon } from "./icons.js";
   function updateStats() {
     $coinTotal.textContent = formatNumber(state.coins) + " koin";
     $coinCps.textContent = "+" + formatNumber(effectiveCps()) + "/detik";
-    $tapValue.textContent = "+" + formatNumber(clickValue()) + " / tap";
   }
 
   // ---------- minimap: top-down schematic of the roads + landmarks + "you" ----------
@@ -1104,25 +1104,13 @@ import { createIcon } from "./icons.js";
     setTimeout(function () { el.remove(); }, 950);
   }
 
-  var tapCount = 0;
+  // idle-management: tapping the shop no longer earns coins — income is fully
+  // passive (walk-up customers + your patio). The cafe still does its little
+  // bounce (triggered in cafe3d) so a tap still feels responsive.
+  function handleTap(clientX, clientY) {}
 
-  function handleTap(clientX, clientY) {
-    var val = clickValue();
-    state.coins += val;
-    state.lifetimeCoins += val;
-    var rect = $floaters.getBoundingClientRect();
-    var x = clientX - rect.left - 15 + (Math.random() * 30 - 15);
-    var y = clientY - rect.top - 10;
-    tapCount += 1;
-    spawnFloater(x, y, val, tapCount % 8 === 0);
-    playTapSound();
-    updateStats();
-  }
-
-  // cat tap: EXACTLY the same coin award as a normal tap (same handleTap),
-  // plus hearts + a "nya" chirp on top
+  // cats stay a tappable easter-egg: just hearts + a "nya" chirp (no coins)
   function handleCatTap(clientX, clientY) {
-    handleTap(clientX, clientY);
     var rect = $floaters.getBoundingClientRect();
     var baseX = clientX - rect.left - 9;
     var baseY = clientY - rect.top - 28;
@@ -1346,6 +1334,13 @@ import { createIcon } from "./icons.js";
       if (cafeScene && cafeScene.setFov) cafeScene.setFov(state.fov);
     });
     $fovSlider.addEventListener("change", save);
+  }
+  if ($resetGameBtn) {
+    $resetGameBtn.addEventListener("click", function () {
+      if (!window.confirm("Yakin mau mulai dari awal lagi? Semua progres (koin, bangunan, prestise, lantai) akan hilang.")) return;
+      try { localStorage.removeItem(SAVE_KEY); } catch (e) {}
+      window.location.reload();
+    });
   }
   if ($settingsClose) {
     $settingsClose.addEventListener("click", function () { $settingsModal.classList.add("hidden"); });
