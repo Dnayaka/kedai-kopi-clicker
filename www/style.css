@@ -1,0 +1,798 @@
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+  font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background: #3e2723;
+  color: #3e2723;
+}
+
+#app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  height: 100dvh;
+  background: linear-gradient(180deg, #4e342e 0%, #3e2723 100%);
+}
+
+/* ---------- top bar (minimalist / compact) ---------- */
+#topbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px 7px 12px;
+  padding-top: max(6px, env(safe-area-inset-top, 6px));
+  background: #2b1a15;
+  color: #fdf6ec;
+  flex-shrink: 0;
+}
+
+#shopname {
+  font-weight: 700;
+  font-size: 13px;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+#shopname svg { flex-shrink: 0; display: block; width: 15px; height: 15px; }
+
+#shopname-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+#stats { text-align: right; line-height: 1.15; }
+#coin-total { font-weight: 800; font-size: 14px; color: #ffd54f; }
+#coin-cps { font-size: 9.5px; color: #d7ccc8; }
+
+/* the three tiny readouts sit on ONE compact row instead of stacking */
+#stats-mini {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 1px;
+}
+
+#game-clock, #bean-stock, #shop-rating {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  font-size: 9px;
+  font-weight: 700;
+  color: #d7ccc8;
+}
+#game-clock svg, #bean-stock svg { display: block; width: 10px; height: 10px; }
+#bean-stock.low { color: #e57373; }
+#shop-rating { color: #ffd54f; }
+
+.icon-btn {
+  background: #4e342e;
+  border: none;
+  color: #ffd54f;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.icon-btn svg { display: block; width: 16px; height: 16px; }
+.icon-btn:active { transform: scale(0.9); }
+
+/* ---------- tap area ---------- */
+#tap-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
+  position: relative;
+  /* sky gradient stops driven by the day-night cycle (game.js writes the
+     custom properties ~4x/s); defaults = full-day palette */
+  --sky-top: #87a8cc;
+  --sky-mid: #b8c8d8;
+  --sky-bot: #e8d8b8;
+  background: linear-gradient(180deg, var(--sky-top) 0%, var(--sky-mid) 52%, var(--sky-bot) 100%);
+  min-height: 0;
+}
+
+#floaters {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.floater {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-weight: 800;
+  font-size: 20px;
+  color: #ffd54f;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.5);
+  animation: floatUp 900ms ease-out forwards;
+  pointer-events: none;
+}
+
+.floater svg { display: block; flex-shrink: 0; }
+.floater.heart { font-size: 0; text-shadow: none; }
+
+@keyframes floatUp {
+  0%   { transform: translateY(0) scale(1);   opacity: 1; }
+  100% { transform: translateY(-90px) scale(1.2); opacity: 0; }
+}
+
+#cafe-canvas {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  display: block;
+  /* none (not manipulation): the browser won't try to detect scroll/zoom
+     gestures on the canvas, which was delaying/throttling the drag-look
+     pointermove stream and making the camera drag feel choppy */
+  touch-action: none;
+}
+
+/* absolute overlay, not flex flow: #cafe-canvas is height:100% and eats all
+   flow space in #tap-area, so anything placed after it in the document never
+   actually gets room to render ("+1/tap" was rendering with zero layout
+   height, effectively dangling) */
+#tap-value {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: #d7ccc8;
+  font-size: 13px;
+  font-weight: 600;
+  text-shadow: 0 1px 3px rgba(0,0,0,0.6);
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* generic hide helper (mode HUD, action button, carried chip, ...) */
+.hidden { display: none !important; }
+
+/* ---------- NPC speech bubbles ---------- */
+#bubble-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 3;
+}
+
+.bubble-chip {
+  position: absolute;
+  transform: translate(-50%, -100%);
+  background: #fdf6ec;
+  color: #4e342e;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  padding: 5px 8px;
+  border-radius: 9px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+  animation: bubbleLife 1600ms ease-out forwards;
+  pointer-events: none;
+}
+
+.bubble-chip::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -5px;
+  margin-left: -5px;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 5px solid #fdf6ec;
+}
+
+/* order bubble: gold, no auto-fade — removed by completeOrder()/failOrder() */
+.bubble-chip.order {
+  background: #ffd54f;
+  animation: none;
+}
+.bubble-chip.order::after { border-top-color: #ffd54f; }
+
+@keyframes bubbleLife {
+  0%   { opacity: 0; transform: translate(-50%, -92%); }
+  10%  { opacity: 1; transform: translate(-50%, -100%); }
+  78%  { opacity: 1; transform: translate(-50%, -100%); }
+  100% { opacity: 0; transform: translate(-50%, -112%); }
+}
+
+/* ---------- walk-mode entry button (idle only) ---------- */
+#walk-btn {
+  position: absolute;
+  right: 12px;
+  bottom: 10px;
+  z-index: 4;
+  background: rgba(43,26,21,0.85);
+  color: #ffd54f;
+  border: none;
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-weight: 700;
+  font-size: 12px;
+}
+#walk-btn:active { transform: scale(0.94); }
+
+/* ---------- carried beans chip ---------- */
+#carried-chip {
+  position: absolute;
+  left: 50%;
+  bottom: 10px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(43,26,21,0.85);
+  color: #ffd54f;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 999px;
+  pointer-events: none;
+  z-index: 4;
+}
+#carried-chip svg { display: block; }
+
+/* ---------- shop ---------- */
+#shop {
+  flex-shrink: 0;
+  height: 46%;
+  background: #fdf6ec;
+  border-radius: 20px 20px 0 0;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 -6px 20px rgba(0,0,0,0.35);
+  transition: height 0.35s ease;
+  overflow: hidden;
+}
+
+/* walk/drive modes AND the manual minimize both collapse #shop's real
+   layout height (not a transform) so #tap-area (flex:1) actually grows to
+   fill the freed space -- a transform-only slide left the shop's 46%
+   flex-basis reserved, exposing #app's dark background as a dead gap. */
+#shop.shop-hidden {
+  height: 0;
+  box-shadow: none;
+  pointer-events: none;
+}
+
+.shop-header {
+  display: flex;
+  border-bottom: 1px solid #e6d9c6;
+  flex-shrink: 0;
+}
+
+.tab {
+  flex: 1;
+  text-align: center;
+  padding: 12px 0 10px 0;
+  font-weight: 700;
+  font-size: 13px;
+  color: #a1887f;
+  border-bottom: 3px solid transparent;
+}
+
+.tab.active {
+  color: #6d4c41;
+  border-bottom: 3px solid #6d4c41;
+}
+
+.tab-panel {
+  display: none;
+  overflow-y: auto;
+  flex: 1;
+  padding: 10px 12px 20px 12px;
+  -webkit-overflow-scrolling: touch;
+}
+.tab-panel.active { display: block; }
+
+.shop-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #fff;
+  border: 1px solid #eee0cc;
+  border-radius: 14px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+}
+
+.shop-item.affordable { border-color: #ffb300; box-shadow: 0 0 0 1px #ffb30033; }
+.shop-item.maxed { opacity: 0.6; }
+
+.item-icon {
+  width: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.item-icon svg { display: block; }
+
+.item-info { flex: 1; min-width: 0; }
+.item-name { font-weight: 700; font-size: 13.5px; color: #4e342e; }
+.item-desc { font-size: 11px; color: #9a8478; margin-top: 1px; }
+.item-count {
+  font-size: 11px;
+  color: #6d4c41;
+  background: #f0e4d0;
+  border-radius: 8px;
+  padding: 1px 6px;
+  display: inline-block;
+  margin-top: 3px;
+}
+
+.buy-btn {
+  background: #6d4c41;
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  padding: 9px 12px;
+  font-size: 12.5px;
+  font-weight: 700;
+  flex-shrink: 0;
+  min-width: 68px;
+}
+.buy-btn:disabled { background: #d7ccc8; color: #9a8478; }
+.buy-btn:active:not(:disabled) { transform: scale(0.93); }
+
+/* ---------- modals ---------- */
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+.modal.hidden { display: none; }
+
+.modal-box {
+  background: #fdf6ec;
+  border-radius: 18px;
+  padding: 22px 20px;
+  width: 82%;
+  max-width: 320px;
+  text-align: center;
+  /* scroll inside the box when it's taller than the viewport (esp. the long
+     settings modal in short landscape) instead of overflowing off-screen */
+  max-height: 88vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.mascot-slot { display: flex; justify-content: center; margin-bottom: 6px; }
+
+.modal-title { font-weight: 800; font-size: 17px; color: #4e342e; margin-bottom: 8px; }
+.modal-box p { font-size: 13.5px; color: #6d4c41; line-height: 1.5; margin: 0 0 16px 0; }
+
+.modal-box button {
+  background: #6d4c41;
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  padding: 11px 18px;
+  font-weight: 700;
+  font-size: 14px;
+}
+/* ---------- settings ---------- */
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin: 6px 0 14px 0;
+}
+.setting-block { text-align: left; margin-bottom: 14px; }
+.setting-label { font-weight: 700; font-size: 14px; color: #4e342e; }
+.toggle-btn {
+  background: #6d4c41;
+  color: #fff;
+  border: none;
+  border-radius: 999px;
+  padding: 8px 20px;
+  font-weight: 700;
+  font-size: 13px;
+}
+.toggle-btn.off { background: #d7ccc8; color: #9a8478; }
+.quality-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.quality-opt {
+  flex: 1 1 30%;
+  background: #f0e4d0;
+  color: #6d4c41;
+  border: 2px solid transparent;
+  border-radius: 10px;
+  padding: 8px 4px;
+  font-weight: 700;
+  font-size: 12px;
+}
+.quality-opt.active { border-color: #6d4c41; background: #fff; color: #4e342e; }
+
+.modal-actions { display: flex; gap: 10px; }
+.modal-actions button { flex: 1; }
+.modal-actions.column { flex-direction: column; gap: 8px; }
+.secondary-btn { background: #e6d9c6 !important; color: #6d4c41 !important; }
+
+/* ---------- shop minimize toggle (idle only) ---------- */
+/* A normal flex sibling between #tap-area and #shop (NOT position:fixed) so
+   it always sits right at the shop's current top edge and moves with it as
+   #shop's real height collapses/expands -- fixed-viewport math here used to
+   overlap #walk-btn (bottom:10px in #tap-area lands at ~the same spot) and
+   stayed put mid-screen once #shop's height, not just its transform, changed. */
+#shop-toggle-btn {
+  align-self: flex-start;
+  flex-shrink: 0;
+  margin: 0 0 0 12px;
+  background: rgba(43,26,21,0.85);
+  color: #ffd54f;
+  border: none;
+  border-radius: 999px 999px 0 0;
+  padding: 6px 12px;
+  font-weight: 700;
+  font-size: 11px;
+}
+#shop-toggle-btn:active { transform: scale(0.94); }
+
+/* ---------- mode HUD (walk / drive) ---------- */
+#mode-hud {
+  position: fixed;
+  inset: 0;
+  z-index: 40; /* above the canvas + shop, below modals (z 50) */
+  pointer-events: none;
+}
+
+#exit-mode-btn {
+  position: absolute;
+  top: calc(70px + env(safe-area-inset-top, 0px));
+  left: 12px;
+  pointer-events: auto;
+  background: rgba(43,26,21,0.85);
+  color: #fdf6ec;
+  border: none;
+  border-radius: 999px;
+  padding: 9px 14px;
+  font-weight: 700;
+  font-size: 12.5px;
+}
+#exit-mode-btn:active { transform: scale(0.94); }
+
+#joystick-base, #look-base {
+  position: absolute;
+  bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  background: rgba(43,26,21,0.45);
+  border: 2px solid rgba(253,246,236,0.35);
+  pointer-events: auto;
+  touch-action: none;
+}
+#joystick-base { left: 18px; }
+#look-base { right: 18px; }
+
+#joystick-knob, #look-knob {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 44px;
+  height: 44px;
+  margin: -22px 0 0 -22px;
+  border-radius: 50%;
+  background: #fdf6ec;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.35);
+  pointer-events: none;
+}
+
+#action-btn {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(30px + env(safe-area-inset-bottom, 0px));
+  min-width: 88px;
+  pointer-events: auto;
+  background: #ffd54f;
+  color: #4e342e;
+  border: none;
+  border-radius: 999px;
+  padding: 14px 18px;
+  font-weight: 800;
+  font-size: 13px;
+  box-shadow: 0 3px 10px rgba(0,0,0,0.35);
+}
+#action-btn:active { transform: translateX(-50%) scale(0.94); }
+
+/* ---------- landscape (phone flipped horizontal) ----------
+   Portrait stacks topbar / play area / 46%-tall shop. In a short landscape
+   viewport that shop would eat most of the height, so move it to a right-hand
+   side panel and let the 3D play area take the rest. */
+/* app is locked to landscape (manifest sensorLandscape), so the side-panel
+   layout applies on any landscape screen, phone or tablet */
+@media (orientation: landscape) {
+  #app { position: relative; }
+  #topbar { position: relative; z-index: 10; }
+  #tap-area { height: auto; }
+
+  #shop {
+    position: absolute;
+    top: 42px;               /* clears the compact topbar */
+    right: 0;
+    bottom: 0;
+    width: 46%;
+    max-width: 420px;
+    height: auto;
+    border-radius: 16px 0 0 0;
+    transition: transform 0.3s ease;
+    z-index: 8;
+  }
+  /* in landscape the collapse slides the panel off to the RIGHT (height:0
+     would misbehave with absolute positioning) */
+  #shop.shop-hidden { transform: translateX(105%); height: auto; }
+
+  /* obvious, always-visible PULL TAB on the panel's left edge (vertically
+     centred = easy thumb reach). Stays put when the panel slides away, so it
+     also reopens it. Bigger tap target than the tiny portrait toggle. */
+  #shop-toggle-btn {
+    position: fixed;
+    align-self: auto;
+    margin: 0;
+    top: 50%;
+    right: 46%;
+    transform: translateY(-50%);
+    padding: 16px 8px;
+    font-size: 12px;
+    border-radius: 12px 0 0 12px;
+    box-shadow: -2px 0 8px rgba(0,0,0,0.3);
+    z-index: 9;
+  }
+  #shop-toggle-btn:active { transform: translateY(-50%) scale(0.94); }
+
+  /* joysticks (#mode-hud) only show in walk/drive, when the shop panel is
+     hidden — so they keep their normal corners; just lift the action button a
+     touch for the shorter landscape height */
+  #action-btn { bottom: calc(14px + env(safe-area-inset-bottom, 0px)); }
+}
+
+/* ---------- Fase C: rating + reviews ---------- */
+/* (#shop-rating styling lives in the compact topbar section above) */
+.setting-input {
+  width: 100%;
+  margin-top: 6px;
+  padding: 9px 12px;
+  border: 2px solid #e6d9c6;
+  border-radius: 10px;
+  font-size: 14px;
+  color: #4e342e;
+  background: #fff;
+  font-family: inherit;
+}
+.setting-input:focus { outline: none; border-color: #6d4c41; }
+
+.setting-slider {
+  width: 100%;
+  margin-top: 10px;
+  accent-color: #6d4c41;
+  height: 22px;
+}
+#sensitivity-val { font-weight: 700; color: #6d4c41; }
+
+.reviews-heading {
+  font-weight: 800;
+  font-size: 13px;
+  color: #6d4c41;
+  margin: 12px 2px 6px 2px;
+}
+
+#reviews-summary {
+  text-align: center;
+  background: #fff;
+  border: 1px solid #eee0cc;
+  border-radius: 14px;
+  padding: 12px;
+  margin-bottom: 6px;
+}
+.rating-big { font-size: 34px; font-weight: 800; color: #4e342e; line-height: 1; }
+.rating-stars { color: #ffb300; font-size: 18px; letter-spacing: 2px; margin-top: 2px; }
+.rating-meta { font-size: 11px; color: #9a8478; margin-top: 4px; }
+
+/* ---- "Lunasi Utang ke Bos": debt bar + mission cards + story modal ---- */
+#debt-block {
+  background: #fff;
+  border: 1px solid #eee0cc;
+  border-radius: 14px;
+  padding: 12px;
+  margin-bottom: 6px;
+}
+.debt-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-weight: 800;
+  font-size: 14px;
+  color: #4e342e;
+  margin-bottom: 8px;
+}
+.debt-head #debt-amount { font-size: 12px; font-weight: 700; color: #b5651d; }
+.debt-bar {
+  height: 14px;
+  background: #efe3d2;
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+#debt-fill {
+  height: 100%;
+  width: 0;
+  background: linear-gradient(90deg, #e0a94e, #f0c060);
+  border-radius: 8px;
+  transition: width 0.3s ease;
+}
+.debt-effect { font-size: 11.5px; font-weight: 700; line-height: 1.4; margin-bottom: 10px; }
+.debt-effect.owe { color: #c0562f; }
+.debt-effect.free { color: #4f8f3a; }
+#pay-debt-btn { width: 100%; }
+#pay-debt-btn:disabled { opacity: 0.5; }
+.mission-card {
+  background: #fff;
+  border: 1px solid #eee0cc;
+  border-left: 4px solid #e0a94e;
+  border-radius: 12px;
+  padding: 11px 12px;
+}
+.mission-card.done { border-left-color: #6aa84f; color: #4e342e; font-weight: 700; font-size: 13px; }
+.mission-title { font-weight: 800; font-size: 14px; color: #4e342e; margin-bottom: 8px; }
+.mission-bar {
+  height: 10px;
+  background: #efe3d2;
+  border-radius: 6px;
+  overflow: hidden;
+  margin-bottom: 6px;
+}
+.mission-bar-fill {
+  height: 100%;
+  width: 0;
+  background: linear-gradient(90deg, #7bbf5a, #9ed67f);
+  border-radius: 6px;
+  transition: width 0.3s ease;
+}
+.mission-prog { font-size: 11.5px; color: #9a8478; font-weight: 700; }
+#mission-note { font-size: 11px; color: #9a8478; margin: 8px 2px; line-height: 1.4; }
+#story-text { white-space: pre-line; line-height: 1.5; color: #5d4037; }
+#daily-streak-label {
+  display: inline-block;
+  background: linear-gradient(90deg, #e0a94e, #f0c060);
+  color: #4e342e;
+  font-weight: 800;
+  font-size: 13px;
+  padding: 4px 14px;
+  border-radius: 999px;
+  margin-bottom: 8px;
+}
+#daily-text { font-size: 20px; font-weight: 800; color: #b5651d; margin-bottom: 4px; }
+
+.competitor-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: #fff;
+  border: 1px solid #eee0cc;
+  border-radius: 10px;
+  padding: 7px 10px;
+  margin-bottom: 5px;
+  font-size: 12.5px;
+  color: #4e342e;
+  font-weight: 600;
+}
+.competitor-rating { color: #8a9a6a; font-weight: 700; }
+.competitor-rating.ahead { color: #e57373; }
+
+.review-card {
+  background: #fff;
+  border: 1px solid #eee0cc;
+  border-radius: 12px;
+  padding: 9px 11px;
+  margin-bottom: 6px;
+}
+.review-head { display: flex; justify-content: space-between; align-items: center; }
+.review-author { font-weight: 700; font-size: 12.5px; color: #4e342e; }
+.review-stars { color: #ffb300; font-size: 12px; letter-spacing: 1px; }
+.review-text { font-size: 12px; color: #6d4c41; margin-top: 3px; line-height: 1.35; }
+
+/* ---------- minimap ---------- */
+#minimap {
+  position: absolute;
+  top: 8px;
+  right: 8px;      /* was left: clashed with the walk-mode "Kembali" (exit) button */
+  width: 84px;
+  height: 84px;
+  border-radius: 10px;
+  border: 2px solid rgba(253,246,236,0.5);
+  background: rgba(43,26,21,0.55);
+  z-index: 3;
+  pointer-events: none;
+}
+
+/* ---------- Fase D: interior entry + boss-room HUD ---------- */
+#interior-btn {
+  position: absolute;
+  right: 12px;
+  bottom: 48px;
+  z-index: 4;
+  background: rgba(43,26,21,0.85);
+  color: #ffd54f;
+  border: none;
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-weight: 700;
+  font-size: 12px;
+}
+#interior-btn:active { transform: scale(0.94); }
+
+#dmode-hud {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  pointer-events: none;
+}
+/* the top strip is the boss-room camera control (drag to rotate) */
+#boss-strip {
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 64px;
+  padding-top: max(6px, env(safe-area-inset-top, 6px));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(43,26,21,0.72);
+  color: #ffd54f;
+  font-weight: 700;
+  font-size: 12px;
+  pointer-events: auto;
+  touch-action: none;
+}
+#dmode-actions {
+  position: absolute;
+  left: 50%;
+  bottom: calc(18px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  display: flex;
+  gap: 10px;
+  pointer-events: none;
+}
+#dmode-actions button {
+  pointer-events: auto;
+  background: #ffd54f;
+  color: #4e342e;
+  border: none;
+  border-radius: 999px;
+  padding: 12px 18px;
+  font-weight: 800;
+  font-size: 13px;
+  box-shadow: 0 3px 10px rgba(0,0,0,0.35);
+}
+#dmode-actions button.secondary-btn { background: rgba(43,26,21,0.85); color: #fdf6ec; }
+#dmode-actions button:active { transform: scale(0.94); }

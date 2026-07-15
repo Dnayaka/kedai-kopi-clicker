@@ -1,0 +1,39 @@
+# ─────────────────────────────────────────────────────────────
+#  Kedai Kopi Clicker — .gitignore
+# ─────────────────────────────────────────────────────────────
+
+# Dependencies
+/node_modules/
+
+# ⚠️  SECRETS — NEVER COMMIT (app signing key + passwords).
+#     Losing/leaking these compromises Play Store updates. Back them up
+#     OUTSIDE git (encrypted). See docs/PUBLISHING.md.
+/android/keystore/
+**/keystore.properties
+*.keystore
+*.jks
+
+# Android build outputs
+/android/app/build/
+/android/build/
+/android/.gradle/
+/android/capacitor-cordova-android-plugins/
+
+# Web assets copied into the native project by `npx cap sync` (regenerated)
+/android/app/src/main/assets/public/
+/android/app/src/main/assets/capacitor.config.json
+/android/app/src/main/assets/capacitor.plugins.json
+
+# Machine-specific
+/android/local.properties
+.gradle/
+
+# Release artifacts
+*.apk
+*.aab
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+*.log
+*.swp
